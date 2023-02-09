@@ -4,6 +4,7 @@ const Web3 = require('web3');
 const web3 = new Web3(process.env.INFURA_END_POINT);
 const mongoose = require('mongoose');
 const { PassThrough } = require('stream');
+const tokenABI = require('./ERC721ABI.json');
 //Connecting to the database 
 mongoose.connect(process.env.URL,
 {
@@ -37,6 +38,8 @@ contract: {
 
 type: String
 },
+collectionName: String,
+symbol: String,
 tokentype: String,
 tokenId:[String],
 ms: [String],
@@ -75,6 +78,8 @@ let subscription1155batch = web3.eth.subscribe('logs', options1155batch);
 //main function is for ERC721
 async function main(transactionHash, blockNumber, contract, tokenId, from, to){
 
+    try {
+      
     
     var k = await Transaction.find({ transactionHash: transactionHash}).exec();
     
@@ -92,7 +97,21 @@ var tokens = [];
 tokens.push(tokenId)
 
 const transaction = await web3.eth.getTransaction(transactionHash);
-
+var block = await web3.eth.getBlock(blockNumber)
+        var timestamp = new Date(block.timestamp * 1000)
+        
+        timestamp = timestamp.toUTCString()
+        timestamp = timestamp.substring(0,timestamp.indexOf("GMT")) + "UTC";
+        var name = "";
+        var symbol = "";
+      try {
+        const instance = new web3.eth.Contract(tokenABI, contract)
+          name = await instance.methods.name().call()
+          symbol = await instance.methods.symbol().call()
+      } catch (error) {
+        
+      }
+        
 //create a object and pushto database
 const transactions = new Transaction({
   transactionHash: transactionHash,
@@ -105,7 +124,10 @@ const transactions = new Transaction({
   tokenId: tokens,
   ms: ms,
   contract: contract,
-  tokentype: "ERC721"
+  tokentype: "ERC721",
+  time: timestamp,
+  collectionName: name,
+  symbol: symbol
 
 })
 await transactions.save();
@@ -128,9 +150,16 @@ await Transaction.updateOne(
   { $push: { tokenId: tokenId, ms: ms } }
 );
   }
+
+}catch (error) {
+      console.log(error.message)
+  }
 }
 //erc1155 function is for transfer single ERC1155 transactions
 async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
+  try {
+    
+   
     var k = await Transaction.find({ transactionHash: hash}).exec();
 
     if(k.length == 0){
@@ -148,7 +177,20 @@ async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
   
   const transaction = await web3.eth.getTransaction(hash);
   
-  
+  var block = await web3.eth.getBlock(blockNumber)
+        var timestamp = new Date(block.timestamp * 1000)
+        
+        timestamp = timestamp.toUTCString()
+        timestamp = timestamp.substring(0,timestamp.indexOf("GMT")) + "UTC"
+        var name = "";
+        var symbol = "";
+      try {
+        const instance = new web3.eth.Contract(tokenABI, contract)
+          name = await instance.methods.name().call()
+          symbol = await instance.methods.symbol().call()
+      } catch (error) {
+        
+      }
   const transactionsERC1155 = new Transaction({
     transactionHash: hash,
     blockNumber: blockNumber,
@@ -161,7 +203,10 @@ async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
     amount: amount,
     ms: ms,
     contract: contract,
-    tokentype: "ERC1155"
+    tokentype: "ERC1155",
+    time: timestamp,
+  collectionName: name,
+  symbol: symbol
   
   })
   await transactionsERC1155.save();
@@ -185,9 +230,17 @@ async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
   );
     }
     
+
+  }catch (error) {
+    console.log(error.message)
+    }
+    
   }
 //erc1155batch is for batch transfer erc1155 transactions 
   async function erc1155batch(hash, blockNumber, from, to, contract, tokenId, amount){
+    try {
+      
+    
     var k = await Transaction.find({ transactionHash: hash}).exec();
 
     if(k.length == 0){
@@ -205,7 +258,20 @@ async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
   
   const transaction = await web3.eth.getTransaction(hash);
   
-  
+  var block = await web3.eth.getBlock(blockNumber)
+        var timestamp = new Date(block.timestamp * 1000)
+        
+        timestamp = timestamp.toUTCString()
+        timestamp = timestamp.substring(0,timestamp.indexOf("GMT")) + "UTC"
+        var name = "";
+        var symbol = "";
+      try {
+        const instance = new web3.eth.Contract(tokenABI, contract)
+          name = await instance.methods.name().call()
+          symbol = await instance.methods.symbol().call()
+      } catch (error) {
+        
+      }
   const transactionsERC1155 = new Transaction({
     transactionHash: hash,
     blockNumber: blockNumber,
@@ -217,7 +283,11 @@ async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
     tokenId: tokenId,
     amount: amount,
     ms: ms,
-    contract: contract
+    contract: contract,
+    tokentype: "ERC1155",
+    time: timestamp,
+  collectionName: name,
+  symbol: symbol
   
   })
   await transactionsERC1155.save();
@@ -237,12 +307,16 @@ async function erc1155(hash, blockNumber, from, to, contract, tokenId, amount){
   
   await Transaction.updateOne(
     { transactionHash: hash }, 
-    { $push: { tokenId: tokenId, ms: ms, amount: amount } }
+    { $push: { tokenId: {$each: tokenId}, ms: {$each: ms}, amount: {$each: amount} } }
   );
+    }
+
+  }catch (error) {
+      console.log(error.message)
     }
     
   }
-//transactions array will continously populate by transactions as we subscribe to nft transactions
+//transactions array will continously gets populated by transactions as we subscribed to nft transactions
 var transactions = [];
 //help function is used to get the transactions from transactions array and prcess and push each one of them into their resective nft transactions 
 async function help(transactions){
@@ -255,8 +329,10 @@ async function help(transactions){
         await main(transaction.transactionHash, transaction.blockNumber, transaction.contract, transaction.tokenId, transaction.from, transaction.to)
     } else if(transaction.tokentype == "ERC1155"){
         if(transaction.transfertype == "Single"){
+          
             await erc1155(transaction.transactionHash, transaction.blockNumber, transaction.from, transaction.to, transaction.contract,transaction.tokenId, transaction.value);
         } else if(transaction.transfertype == "Batch"){
+          
             await erc1155batch(transaction.transactionHash, transaction.blockNumber, transaction.from, transaction.to, transaction.contract,transaction.tokenId, transaction.value);
         }
         
@@ -301,7 +377,7 @@ subscription721.on('data', async event => {
 //create object  
 var k = {
   "transactionHash": event.transactionHash,
-  "blockNumer": event.blockNumber,
+  "blockNumber": event.blockNumber,
   "from": transaction.from,
   "to": transaction.to,
   "contract": event.address,
@@ -311,13 +387,8 @@ var k = {
 //push to transactions array
 transactions.push(k)
 
-
-
 		}
-
-    
-        
-   
+ 
 });
 
 
@@ -350,7 +421,7 @@ subscription1155.on('data', async event => {
 //create object
 var k = {
 "transactionHash": event.transactionHash,
-"blockNumer": event.blockNumber,
+"blockNumber": event.blockNumber,
 "from": transaction.from,
 "to": transaction.to,
 "contract": event.address,
@@ -395,7 +466,7 @@ subscription1155batch.on('data', async event => {
 //create object
 var k = {
   "transactionHash": event.transactionHash,
-  "blockNumer": event.blockNumber,
+  "blockNumber": event.blockNumber,
   "from": transaction.from,
   "to": transaction.to,
   "contract": event.address,
