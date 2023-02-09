@@ -1,7 +1,7 @@
 require("dotenv").config();
 var fs = require('fs');
 const Web3 = require('web3');
-const web3 = new Web3(process.env.INFURA_END_POINT);
+const web3 = new Web3(process.env.END_POINT);
 const mongoose = require('mongoose');
 const { PassThrough } = require('stream');
 const tokenABI = require('./ERC721ABI.json');
